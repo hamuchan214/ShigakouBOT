@@ -30,9 +30,12 @@ export class GmailService {
       if (this.lastCheckTime) {
         const timeString = this.lastCheckTime.toISOString();
         query = `after:${timeString} -category:promotions -category:social -category:updates -category:forums`;
+        console.log(`Using query: ${query}`);
+        console.log(`Last check time: ${this.lastCheckTime}`);
       } else {
         // 初回実行時は過去1時間のメールを取得
         query = 'newer_than:1h -category:promotions -category:social -category:updates -category:forums';
+        console.log(`First run, using query: ${query}`);
       }
 
       const response = await this.gmail.users.messages.list({
@@ -40,6 +43,8 @@ export class GmailService {
         q: query,
         maxResults: 20,
       });
+
+      console.log(`Gmail API response: ${response.data.messages?.length || 0} messages found`);
 
       const messages = response.data.messages || [];
       const emailData: EmailData[] = [];
@@ -53,6 +58,7 @@ export class GmailService {
 
       // チェック時刻を更新
       this.lastCheckTime = new Date();
+      console.log(`Updated last check time to: ${this.lastCheckTime}`);
 
       return emailData;
     } catch (error) {
