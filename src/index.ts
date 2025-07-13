@@ -25,12 +25,12 @@ class GmailDiscordBot {
       // 初回チェック
       await this.checkAndForwardEmails();
       
-      // 定期的なチェックを開始（5分ごと）
+      // 定期的なチェックを開始（1分ごと）
       this.checkInterval = setInterval(async () => {
         await this.checkAndForwardEmails();
-      }, 5 * 60 * 1000);
+      }, 1 * 60 * 1000);
 
-      console.log('Bot is running. Checking for new emails every 5 minutes.');
+      console.log('Bot is running. Checking for new emails every 1 minute.');
       
       // プロセス終了時の処理
       process.on('SIGINT', () => this.shutdown());

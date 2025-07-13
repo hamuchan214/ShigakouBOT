@@ -17,31 +17,54 @@ class GmailService {
     }
     async getUnreadMessages() {
         try {
-            // 前回チェック時刻以降のメールのみを取得
-            let query = '';
+            // より確実な方法：最近のメールを取得して時刻でフィルタリング
+            const query = '-category:promotions -category:social -category:updates -category:forums';
+            console.log(`Using query: ${query}`);
             if (this.lastCheckTime) {
-                const timeString = this.lastCheckTime.toISOString();
-                query = `after:${timeString} -category:promotions -category:social -category:updates -category:forums`;
+                console.log(`Last check time: ${this.lastCheckTime}`);
             }
             else {
-                // 初回実行時は過去1時間のメールを取得
-                query = 'newer_than:1h -category:promotions -category:social -category:updates -category:forums';
+                console.log(`First run`);
             }
             const response = await this.gmail.users.messages.list({
                 userId: process.env.GMAIL_USER_ID || 'me',
                 q: query,
-                maxResults: 20,
+                maxResults: 50, // より多くのメールを取得
             });
+            console.log(`Gmail API response: ${response.data.messages?.length || 0} messages found`);
             const messages = response.data.messages || [];
             const emailData = [];
             for (const message of messages) {
                 const email = await this.getMessageDetails(message.id);
                 if (email && this.isNotPromotional(email)) {
-                    emailData.push(email);
+                    // 初回実行時は過去1時間のメールのみを対象にする
+                    const emailDate = new Date(email.date);
+                    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                    if (!this.lastCheckTime) {
+                        // 初回実行時：過去1時間のメールのみ
+                        if (emailDate > oneHourAgo) {
+                            emailData.push(email);
+                            console.log(`First run - Found recent email: ${email.subject} (${email.date})`);
+                        }
+                        else {
+                            console.log(`First run - Skipping old email: ${email.subject} (${email.date})`);
+                        }
+                    }
+                    else {
+                        // 2回目以降：前回チェック時刻以降のメール
+                        if (emailDate > this.lastCheckTime) {
+                            emailData.push(email);
+                            console.log(`Found new email: ${email.subject} (${email.date})`);
+                        }
+                        else {
+                            console.log(`Skipping old email: ${email.subject} (${email.date})`);
+                        }
+                    }
                 }
             }
             // チェック時刻を更新
             this.lastCheckTime = new Date();
+            console.log(`Updated last check time to: ${this.lastCheckTime}`);
             return emailData;
         }
         catch (error) {
@@ -120,7 +143,7 @@ class GmailService {
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         return emailDate > oneHourAgo;
     }
-    // プロモーションメールか　判定したい。適当に選んだ
+    // プロモーションメールか判定したい。適当に選んだ
     isNotPromotional(email) {
         const promotionalKeywords = [
             'セール', '特価', '割引', 'キャンペーン', '無料', 'プレゼント', '進呈',
