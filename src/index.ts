@@ -1,33 +1,33 @@
 import dotenv from 'dotenv';
-import { GmailService } from './services/gmailService';
-import { DiscordService } from './services/discordService';
+import { FeatureManager } from './services/featureManager';
+import { EmailForwarder } from './services/emailForwarder';
 
 dotenv.config();
 
 class GmailDiscordBot {
-  private gmailService: GmailService;
-  private discordService: DiscordService;
+  private featureManager: FeatureManager;
   private checkInterval: NodeJS.Timeout | null = null;
-  private processedEmails: Set<string> = new Set();
 
   constructor() {
-    this.gmailService = new GmailService();
-    this.discordService = new DiscordService();
+    this.featureManager = new FeatureManager();
+    
+    // メール転送機能を追加
+    this.featureManager.addFeature(new EmailForwarder());
   }
 
   async start(): Promise<void> {
     try {
       console.log('Gmail to Discord Bot starting...');
       
-
-      await this.discordService.initialize();
+      // 全ての機能を初期化
+      await this.featureManager.initializeAllFeatures();
       
-      // 初回チェック
-      await this.checkAndForwardEmails();
+      // 初回実行
+      await this.featureManager.executeAllFeatures();
       
-      // 定期的なチェックを開始（1分ごと）
+      // 定期的な実行を開始（1分ごと）
       this.checkInterval = setInterval(async () => {
-        await this.checkAndForwardEmails();
+        await this.featureManager.executeAllFeatures();
       }, 1 * 60 * 1000);
 
       console.log('Bot is running. Checking for new emails every 1 minute.');
@@ -37,48 +37,8 @@ class GmailDiscordBot {
       process.on('SIGTERM', () => this.shutdown());
       
     } catch (error) {
-      console.error('❌ Failed to start bot:', error);
+      console.error('Failed to start bot:', error);
       process.exit(1);
-    }
-  }
-
-  private async checkAndForwardEmails(): Promise<void> {
-    try {
-      console.log('Checking for new emails...');
-      
-      const emails = await this.gmailService.getUnreadMessages();
-      
-      for (const email of emails) {
-        // 既に処理済みのメールはスキップ
-        if (this.processedEmails.has(email.id)) {
-          continue;
-        }
-        
-        console.log(`Processing email: ${email.subject}`);
-        
-        // Discordに送信
-        await this.discordService.sendEmailNotification(email);
-        
-        // 処理済みとしてマーク
-        this.processedEmails.add(email.id);
-        
-        // 処理済みメールの数を制限（メモリリーク防止）
-        if (this.processedEmails.size > 1000) {
-          const firstKey = this.processedEmails.values().next().value;
-          if (firstKey) {
-            this.processedEmails.delete(firstKey);
-          }
-        }
-      }
-      
-      if (emails.length > 0) {
-        console.log(`Processed ${emails.length} new email(s)`);
-      } else {
-        console.log('No new emails found');
-      }
-      
-    } catch (error) {
-      console.error('Error checking emails:', error);
     }
   }
 
@@ -89,7 +49,7 @@ class GmailDiscordBot {
       clearInterval(this.checkInterval);
     }
     
-    await this.discordService.disconnect();
+    await this.featureManager.shutdownAllFeatures();
     
     console.log('Bot shutdown complete');
     process.exit(0);
@@ -109,7 +69,7 @@ function validateEnvironment(): void {
   const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
   
   if (missingVars.length > 0) {
-    console.error('❌ Missing required environment variables:');
+    console.error('Missing required environment variables:');
     missingVars.forEach(varName => console.error(`  - ${varName}`));
     console.error('\nPlease check your .env file and ensure all required variables are set.');
     process.exit(1);
@@ -125,6 +85,6 @@ async function main(): Promise<void> {
 }
 
 main().catch(error => {
-  console.error('❌ Fatal error:', error);
+  console.error('Fatal error:', error);
   process.exit(1);
 }); 
