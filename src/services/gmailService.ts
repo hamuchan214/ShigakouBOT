@@ -38,7 +38,7 @@ export class GmailService {
       const response = await this.gmail.users.messages.list({
         userId: process.env.GMAIL_USER_ID || 'me',
         q: query,
-        maxResults: 50, // より多くのメールを取得
+        maxResults: 10, // より多くのメールを取得
       });
 
       console.log(`Gmail API response: ${response.data.messages?.length || 0} messages found`);
@@ -50,7 +50,7 @@ export class GmailService {
         const email = await this.getMessageDetails(message.id);
         if (email && this.isNotPromotional(email)) {
           // 初回実行時は過去1時間のメールのみを対象にする
-          const emailDate = new Date(email.date);
+          const emailDate = this.parseEmailDate(email.date);
           const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
           
           if (!this.lastCheckTime) {
@@ -63,7 +63,12 @@ export class GmailService {
             }
           } else {
             // 2回目以降：前回チェック時刻以降のメール
-            if (emailDate > this.lastCheckTime) {
+            const emailTimestamp = emailDate.getTime();
+            const lastCheckTimestamp = this.lastCheckTime.getTime();
+            
+            console.log(`Comparing timestamps: email=${emailTimestamp}, lastCheck=${lastCheckTimestamp}, diff=${emailTimestamp - lastCheckTimestamp}ms`);
+            
+            if (emailTimestamp > lastCheckTimestamp) {
               emailData.push(email);
               console.log(`Found new email: ${email.subject} (${email.date})`);
             } else {
@@ -159,6 +164,25 @@ export class GmailService {
     const emailDate = new Date(email.date);
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     return emailDate > oneHourAgo;
+  }
+
+  // Gmailの日付文字列を確実にパースする
+  private parseEmailDate(dateString: string): Date {
+    try {
+      // RFC 2822形式の日付をパース
+      const date = new Date(dateString);
+      
+      // パースが失敗した場合のフォールバック
+      if (isNaN(date.getTime())) {
+        console.warn(`Failed to parse date: ${dateString}, using current time`);
+        return new Date();
+      }
+      
+      return date;
+    } catch (error) {
+      console.error(`Error parsing date: ${dateString}`, error);
+      return new Date();
+    }
   }
 
   // プロモーションメールか判定したい。適当に選んだ
