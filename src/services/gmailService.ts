@@ -23,14 +23,15 @@ export class GmailService {
     this.gmail = google.gmail({ version: 'v1', auth });
   }
 
-  async getUnreadMessages(): Promise<EmailData[]> {
+  // 旧: async getUnreadMessages(): Promise<EmailData[]>
+  async getAllMessages(): Promise<EmailData[]> {
     try {
-      // より確実な方法：最近のメールを取得して時刻でフィルタリング
+      // 全メールを取得（プロモ・ソーシャル等は除外）
       const query = '-category:promotions -category:social -category:updates -category:forums';
       console.log(`Using query: ${query}`);
       
-      if (this.lastCheckTime) {
-        console.log(`Last check time: ${this.lastCheckTime}`);
+      if (this.lastCheckedMessageId) {
+        console.log(`Last checked message ID: ${this.lastCheckedMessageId}`);
       } else {
         console.log(`First run`);
       }
@@ -38,13 +39,14 @@ export class GmailService {
       const response = await this.gmail.users.messages.list({
         userId: process.env.GMAIL_USER_ID || 'me',
         q: query,
-        maxResults: 10, // より多くのメールを取得
+        maxResults: 20, // より多くのメールを取得
       });
 
       console.log(`Gmail API response: ${response.data.messages?.length || 0} messages found`);
 
       const messages = response.data.messages || [];
       const emailData: EmailData[] = [];
+      let latestMessageId: string | null = null;
 
       for (const message of messages) {
         const email = await this.getMessageDetails(message.id);
@@ -53,32 +55,39 @@ export class GmailService {
           const emailDate = this.parseEmailDate(email.date);
           const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
           
-          if (!this.lastCheckTime) {
+          if (!this.lastCheckedMessageId) {
             // 初回実行時：過去1時間のメールのみ
             if (emailDate > oneHourAgo) {
               emailData.push(email);
-              console.log(`First run - Found recent email: ${email.subject} (${email.date})`);
+              console.log(`First run - Found recent email: ${email.subject} (ID: ${email.id})`);
             } else {
-              console.log(`First run - Skipping old email: ${email.subject} (${email.date})`);
+              console.log(`First run - Skipping old email: ${email.subject} (ID: ${email.id})`);
             }
           } else {
-            // 2回目以降：前回チェック時刻以降のメール
-            const emailTimestamp = emailDate.getTime();
-            const lastCheckTimestamp = this.lastCheckTime.getTime();
-            
-            console.log(`Comparing timestamps: email=${emailTimestamp}, lastCheck=${lastCheckTimestamp}, diff=${emailTimestamp - lastCheckTimestamp}ms`);
-            
-            if (emailTimestamp > lastCheckTimestamp) {
+            // 2回目以降：前回チェックしたメールIDより新しいメール
+            if (email.id !== this.lastCheckedMessageId) {
               emailData.push(email);
-              console.log(`Found new email: ${email.subject} (${email.date})`);
+              console.log(`Found new email: ${email.subject} (ID: ${email.id})`);
             } else {
-              console.log(`Skipping old email: ${email.subject} (${email.date})`);
+              console.log(`Reached last checked message ID: ${email.id}, stopping`);
+              break; // 前回チェックしたメールIDに到達したら停止
             }
+          }
+          
+          // 最新のメールIDを記録
+          if (!latestMessageId) {
+            latestMessageId = email.id;
           }
         }
       }
 
-      // チェック時刻を更新
+      // 最新のメールIDを更新
+      if (latestMessageId) {
+        this.lastCheckedMessageId = latestMessageId;
+        console.log(`Updated last checked message ID to: ${this.lastCheckedMessageId}`);
+      }
+
+      // チェック時刻も更新（デバッグ用）
       this.lastCheckTime = new Date();
       console.log(`Updated last check time to: ${this.lastCheckTime}`);
 

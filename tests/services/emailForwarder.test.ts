@@ -68,19 +68,19 @@ describe('EmailForwarder', () => {
     });
 
     it('should process new emails successfully', async () => {
-      mockGmailService.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmailService.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscordService.sendEmailNotification.mockResolvedValue(undefined);
 
       await emailForwarder.execute();
 
-      expect(mockGmailService.getUnreadMessages).toHaveBeenCalled();
+      expect(mockGmailService.getAllMessages).toHaveBeenCalled();
       expect(mockDiscordService.sendEmailNotification).toHaveBeenCalledTimes(2);
       expect(mockDiscordService.sendEmailNotification).toHaveBeenCalledWith(mockEmails[0]);
       expect(mockDiscordService.sendEmailNotification).toHaveBeenCalledWith(mockEmails[1]);
     });
 
     it('should skip already processed emails', async () => {
-      mockGmailService.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmailService.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscordService.sendEmailNotification.mockResolvedValue(undefined);
 
       // 1回目実行
@@ -94,22 +94,22 @@ describe('EmailForwarder', () => {
     });
 
     it('should handle empty email list', async () => {
-      mockGmailService.getUnreadMessages.mockResolvedValue([]);
+      mockGmailService.getAllMessages.mockResolvedValue([]);
 
       await emailForwarder.execute();
 
-      expect(mockGmailService.getUnreadMessages).toHaveBeenCalled();
+      expect(mockGmailService.getAllMessages).toHaveBeenCalled();
       expect(mockDiscordService.sendEmailNotification).not.toHaveBeenCalled();
     });
 
     it('should handle Gmail service errors gracefully', async () => {
-      mockGmailService.getUnreadMessages.mockRejectedValue(new Error('Gmail API Error'));
+      mockGmailService.getAllMessages.mockRejectedValue(new Error('Gmail API Error'));
 
       await expect(emailForwarder.execute()).resolves.not.toThrow();
     });
 
     it('should handle Discord service errors gracefully', async () => {
-      mockGmailService.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmailService.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscordService.sendEmailNotification.mockRejectedValue(new Error('Discord API Error'));
 
       await expect(emailForwarder.execute()).resolves.not.toThrow();
@@ -126,7 +126,7 @@ describe('EmailForwarder', () => {
         snippet: `メール${i}の内容`,
       }));
 
-      mockGmailService.getUnreadMessages.mockResolvedValue(manyEmails);
+      mockGmailService.getAllMessages.mockResolvedValue(manyEmails);
       mockDiscordService.sendEmailNotification.mockResolvedValue(undefined);
 
       await emailForwarder.execute();

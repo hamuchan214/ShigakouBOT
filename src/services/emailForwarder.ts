@@ -22,7 +22,7 @@ export class EmailForwarder implements BotFeature {
     try {
       console.log('Checking for new emails...');
       
-      const emails = await this.gmailService.getUnreadMessages();
+      const emails = await this.gmailService.getAllMessages();
       
       for (const email of emails) {
         // 既に処理済みのメールはスキップ

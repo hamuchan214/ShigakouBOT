@@ -53,7 +53,7 @@ describe('Email Forwarding Integration', () => {
     jest.clearAllMocks();
 
     mockGmail = {
-      getUnreadMessages: jest.fn(),
+      getAllMessages: jest.fn(),
     };
     mockDiscord = {
       initialize: jest.fn().mockResolvedValue(undefined),
@@ -90,17 +90,17 @@ describe('Email Forwarding Integration', () => {
     ];
 
     it('should process and forward emails successfully', async () => {
-      mockGmail.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmail.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscord.sendEmailNotification.mockResolvedValue(undefined);
 
       await emailForwarder.execute();
 
-      expect(mockGmail.getUnreadMessages).toHaveBeenCalled();
+      expect(mockGmail.getAllMessages).toHaveBeenCalled();
       expect(mockDiscord.sendEmailNotification).toHaveBeenCalledTimes(2);
     }, 15000);
 
     it('should filter out promotional emails', async () => {
-      mockGmail.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmail.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscord.sendEmailNotification.mockResolvedValue(undefined);
 
       await emailForwarder.execute();
@@ -110,13 +110,13 @@ describe('Email Forwarding Integration', () => {
     }, 15000);
 
     it('should handle API errors gracefully', async () => {
-      mockGmail.getUnreadMessages.mockRejectedValue(new Error('Gmail API Error'));
+      mockGmail.getAllMessages.mockRejectedValue(new Error('Gmail API Error'));
 
       await expect(emailForwarder.execute()).resolves.not.toThrow();
     }, 15000);
 
     it('should handle Discord API errors gracefully', async () => {
-      mockGmail.getUnreadMessages.mockResolvedValue(mockEmails);
+      mockGmail.getAllMessages.mockResolvedValue(mockEmails);
       mockDiscord.sendEmailNotification.mockRejectedValue(new Error('Discord API Error'));
 
       await expect(emailForwarder.execute()).resolves.not.toThrow();
