@@ -29,24 +29,20 @@ export class DiscordService {
   }
 
   async sendEmailNotification(email: EmailData): Promise<void> {
-    try {
-      const channel = await this.client.channels.fetch(this.channelId) as TextChannel;
-      if (!channel) {
-        throw new Error(`Channel ${this.channelId} not found`);
-      }
-
-      const embed = this.createEmailEmbed(email);
-      await channel.send({ embeds: [embed] });
-      
-      console.log(`Email notification sent for: ${email.subject}`);
-    } catch (error) {
-      console.error('Error sending Discord notification:', error);
+    const channel = await this.client.channels.fetch(this.channelId) as TextChannel;
+    if (!channel) {
+      throw new Error(`Channel ${this.channelId} not found`);
     }
+
+    const embed = this.createEmailEmbed(email);
+    await channel.send({ embeds: [embed] });
+    
+    console.log(`Email notification sent for: ${email.subject}`);
   }
 
   private createEmailEmbed(email: EmailData): EmbedBuilder {
     const embed = new EmbedBuilder()
-      .setTitle(`📧 ${email.subject}`)
+      .setTitle(`📧 新しいメール: ${email.subject}`)
       .setDescription(email.snippet.length > 200 ? email.snippet.substring(0, 200) + '...' : email.snippet)
       .setColor(0x0099ff)
       .addFields(
@@ -54,8 +50,7 @@ export class DiscordService {
         { name: 'To', value: email.to, inline: true },
         { name: 'Date', value: email.date, inline: true }
       )
-      .setTimestamp()
-      .setFooter({ text: 'Gmail to Discord Bot' });
+      .setTimestamp();
 
     return embed;
   }

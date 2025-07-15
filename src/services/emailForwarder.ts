@@ -9,9 +9,9 @@ export class EmailForwarder implements BotFeature {
   private discordService: DiscordService;
   private processedEmails: Set<string> = new Set();
 
-  constructor() {
-    this.gmailService = new GmailService();
-    this.discordService = new DiscordService();
+  constructor(gmailService?: GmailService, discordService?: DiscordService) {
+    this.gmailService = gmailService || new GmailService();
+    this.discordService = discordService || new DiscordService();
   }
 
   async initialize(): Promise<void> {
