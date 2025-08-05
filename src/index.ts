@@ -23,14 +23,14 @@ class GmailDiscordBot {
       await this.featureManager.initializeAllFeatures();
       
       // 初回実行
-      await this.featureManager.executeAllFeatures();
+      // await this.featureManager.executeAllFeatures();
       
-      // 定期的な実行を開始（1分ごと）
-      this.checkInterval = setInterval(async () => {
-        await this.featureManager.executeAllFeatures();
-      }, 1 * 60 * 1000);
+      // 定期的な実行を停止（イベント駆動のため）
+      // this.checkInterval = setInterval(async () => {
+      //   await this.featureManager.executeAllFeatures();
+      // }, 1 * 60 * 1000);
 
-      console.log('Bot is running. Checking for new emails every 1 minute.');
+      console.log('Bot is running and listening for new email events.');
       
       // プロセス終了時の処理
       process.on('SIGINT', () => this.shutdown());
@@ -61,17 +61,22 @@ function validateEnvironment(): void {
   const requiredEnvVars = [
     'DISCORD_TOKEN',
     'DISCORD_CHANNEL_ID',
-    'GMAIL_CLIENT_ID',
-    'GMAIL_CLIENT_SECRET',
-    'GMAIL_REFRESH_TOKEN'
+    'IMAP_USER',
+    'IMAP_PASSWORD',
+    'IMAP_HOST',
+    'IMAP_PORT',
   ];
 
-  const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+  const missingVars = requiredEnvVars.filter(
+    (varName) => !process.env[varName],
+  );
   
   if (missingVars.length > 0) {
     console.error('Missing required environment variables:');
-    missingVars.forEach(varName => console.error(`  - ${varName}`));
-    console.error('\nPlease check your .env file and ensure all required variables are set.');
+    missingVars.forEach((varName) => console.error(`  - ${varName}`));
+    console.error(
+      '\nPlease check your .env file and ensure all required variables are set.',
+    );
     process.exit(1);
   }
 }

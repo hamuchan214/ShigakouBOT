@@ -1,4 +1,4 @@
-import { Client, TextChannel, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, TextChannel, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { EmailData } from '../types';
 
 export class DiscordService {
@@ -29,21 +29,24 @@ export class DiscordService {
   }
 
   async sendEmailNotification(email: EmailData): Promise<void> {
-    const channel = await this.client.channels.fetch(this.channelId) as TextChannel;
+    const channel = (await this.client.channels.fetch(
+      this.channelId,
+    )) as TextChannel;
     if (!channel) {
       throw new Error(`Channel ${this.channelId} not found`);
     }
 
     const embed = this.createEmailEmbed(email);
     await channel.send({ embeds: [embed] });
-    
+
     console.log(`Email notification sent for: ${email.subject}`);
   }
 
   private createEmailEmbed(email: EmailData): EmbedBuilder {
+    const description = email.body || email.snippet;
     const embed = new EmbedBuilder()
       .setTitle(`📧 新しいメール: ${email.subject}`)
-      .setDescription(email.snippet.length > 200 ? email.snippet.substring(0, 200) + '...' : email.snippet)
+      .setDescription(description.substring(0, 4096))
       .setColor(0x0099ff)
       .addFields(
         { name: 'From', value: email.from, inline: true },

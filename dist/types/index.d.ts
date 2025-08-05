@@ -22,13 +22,13 @@ export interface GmailMessage {
 }
 export interface EmailData {
     id: string;
+    uid: string;
     subject: string;
     from: string;
     to: string;
     date: string;
     snippet: string;
     body?: string;
-    labelIds?: string[];
 }
 export interface DiscordEmbed {
     title: string;
