@@ -9,6 +9,15 @@ const mailparser_1 = require("mailparser");
 class ImapService {
     constructor() {
         this.onNewMail = null;
+        this.keepAliveInterval = null;
+        this.isReconnecting = false;
+        this.manuallyDisconnected = false;
+        this.initializeImapConnection();
+    }
+    initializeImapConnection() {
+        if (this.imap) {
+            this.imap.removeAllListeners();
+        }
         this.imap = new node_imap_1.default({
             user: process.env.IMAP_USER || '',
             password: process.env.IMAP_PASSWORD || '',
@@ -18,6 +27,11 @@ class ImapService {
             tlsOptions: {
                 rejectUnauthorized: false,
             },
+            keepalive: {
+                interval: 10000,
+                idleInterval: 300000, // 5 minutes
+                forceNoop: true,
+            }
         });
         this.imap.on('mail', this.handleNewMail.bind(this));
         this.imap.on('update', this.handleUpdate.bind(this));
@@ -52,10 +66,37 @@ class ImapService {
     }
     handleError(err) {
         console.error('IMAP Error:', err);
-        // Consider adding reconnect logic here
+        this.reconnect();
     }
     handleEnd() {
         console.log('IMAP connection ended.');
+        if (!this.manuallyDisconnected) {
+            this.reconnect();
+        }
+    }
+    reconnect() {
+        if (this.isReconnecting) {
+            return;
+        }
+        this.isReconnecting = true;
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
+        }
+        console.log('Attempting to reconnect in 15 seconds...');
+        setTimeout(() => {
+            this.initializeImapConnection();
+            this.connect()
+                .then(() => {
+                console.log('IMAP reconnected successfully.');
+                this.isReconnecting = false;
+            })
+                .catch((err) => {
+                console.error('Failed to reconnect:', err);
+                this.isReconnecting = false;
+                // We will try again due to the 'error' or 'end' event firing again
+            });
+        }, 15000);
     }
     fetchAndProcess(uids) {
         if (uids.length === 0)
@@ -97,6 +138,7 @@ class ImapService {
                         console.error('Failed to open inbox on connect:', err);
                         return reject(err);
                     }
+                    this.manuallyDisconnected = false;
                     console.log('Inbox opened successfully.');
                     resolve();
                 });
@@ -109,6 +151,11 @@ class ImapService {
         });
     }
     disconnect() {
+        this.manuallyDisconnected = true;
+        if (this.keepAliveInterval) {
+            clearInterval(this.keepAliveInterval);
+            this.keepAliveInterval = null;
+        }
         this.imap.end();
     }
 }
