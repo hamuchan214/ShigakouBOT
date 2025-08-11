@@ -39,17 +39,27 @@ export class EmailForwarder implements BotFeature {
   }
 
   async initialize(): Promise<void> {
-    await this.discordService.initialize();
-    
-    this.imapService.registerMailCallback(this.handleNewEmail.bind(this));
-    
-    await this.imapService.connect();
-    console.log('EmailForwarder initialized and listening for new emails.');
+    try {
+      await this.discordService.initialize();
+
+      this.imapService.registerMailCallback(this.handleNewEmail.bind(this));
+
+      await this.imapService.connect();
+      console.log('EmailForwarder initialized and listening for new emails.');
+    } catch (error: unknown) {
+        console.error('Failed to initialize EmailForwarder:', error);
+        await this.discordService.sendErrorNotification(
+            error as Error,
+            'Bot Initialization'
+        );
+        // Initialization failed, re-throw error to stop the bot
+        throw error;
+    }
   }
   
   private async handleNewEmail(fetchedEmail: FetchedEmail): Promise<void> {
-      try {
-          const emailData = mailToEmailData(fetchedEmail.uid, fetchedEmail.mail);
+    try {
+      const emailData = mailToEmailData(fetchedEmail.uid, fetchedEmail.mail);
 
           if (this.processedEmails.has(emailData.id)) {
               console.log(`Skipping already processed email UID ${emailData.uid}`);
@@ -66,9 +76,16 @@ export class EmailForwarder implements BotFeature {
                   this.processedEmails.delete(firstKey);
               }
           }
-      } catch(error) {
-          console.error(`Error handling new email UID ${fetchedEmail.uid}:`, error);
-      }
+    } catch (error: unknown) {
+      console.error(
+        `Error handling new email UID ${fetchedEmail.uid}:`,
+        error,
+      );
+      await this.discordService.sendErrorNotification(
+        error as Error,
+        `Email Processing (UID: ${fetchedEmail.uid})`,
+      );
+    }
   }
 
   // This method will now be a no-op as the class is event-driven.

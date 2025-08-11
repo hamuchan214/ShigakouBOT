@@ -58,6 +58,39 @@ export class DiscordService {
     return embed;
   }
 
+  public async sendErrorNotification(
+    error: Error,
+    context: string,
+  ): Promise<void> {
+    try {
+      const channel = (await this.client.channels.fetch(
+        this.channelId,
+      )) as TextChannel;
+      if (!channel) {
+        console.error(
+          `Error notification channel ${this.channelId} not found.`,
+        );
+        return;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🚨 Bot Error: ${context}`)
+        .setDescription(
+          `An error occurred. See details below.\n\n**Error:**\n\`\`\`${error.message}\`\`\``,
+        )
+        .setColor(0xff0000) // Red
+        .addFields({
+          name: 'Stack Trace',
+          value: `\`\`\`${error.stack || 'No stack trace available'}\`\`\``.substring(0, 1024),
+        })
+        .setTimestamp();
+
+      await channel.send({ embeds: [embed] });
+    } catch (sendError: any) {
+      console.error('Failed to send error notification to Discord:', sendError);
+    }
+  }
+
   async disconnect(): Promise<void> {
     await this.client.destroy();
   }

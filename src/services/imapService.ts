@@ -9,6 +9,7 @@ export interface FetchedEmail {
 export class ImapService {
   private imap!: Imap; // Use definite assignment assertion
   private onNewMail: ((email: FetchedEmail) => void) | null = null;
+  private onError: ((error: Error) => void) | null = null;
   private keepAliveInterval: NodeJS.Timeout | null = null;
   private isReconnecting = false;
   private manuallyDisconnected = false;
@@ -28,6 +29,7 @@ export class ImapService {
       host: process.env.IMAP_HOST || '',
       port: parseInt(process.env.IMAP_PORT || '993', 10),
       tls: (process.env.IMAP_TLS || 'true') === 'true',
+      authTimeout: 30000, // 30 seconds
       tlsOptions: {
         rejectUnauthorized: false,
       },
@@ -43,6 +45,10 @@ export class ImapService {
     this.imap.on('error', this.handleError.bind(this));
     this.imap.on('end', this.handleEnd.bind(this));
   }
+  public registerErrorCallback(callback: (error: Error) => void) {
+      this.onError = callback;
+  }
+
   public registerMailCallback(callback: (email: FetchedEmail) => void) {
     this.onNewMail = callback;
   }
@@ -72,8 +78,11 @@ export class ImapService {
   }
 
   private handleError(err: Error) {
-      console.error('IMAP Error:', err);
-      this.reconnect();
+    console.error('IMAP Error:', err);
+    if(this.onError) {
+        this.onError(err);
+    }
+    this.reconnect();
   }
 
   private handleEnd() {
@@ -161,6 +170,9 @@ export class ImapService {
 
       this.imap.once('error', (err: Error) => {
         console.error('IMAP connection error:', err);
+        if(this.onError) {
+            this.onError(err);
+        }
         reject(err);
       });
 
