@@ -37,9 +37,20 @@ export class DiscordService {
     }
 
     const embed = this.createEmailEmbed(email, title);
-    await channel.send({ embeds: [embed] });
+    await this.sendEmbed(this.channelId, embed);
 
     console.log(`Email notification sent for: ${email.subject}`);
+  }
+
+  async sendEmbed(channelId: string, embed: EmbedBuilder): Promise<void> {
+    if (!channelId) {
+      throw new Error('Channel ID was not provided to sendEmbed.');
+    }
+    const channel = (await this.client.channels.fetch(channelId)) as TextChannel;
+    if (!channel) {
+      throw new Error(`Channel ${channelId} not found`);
+    }
+    await channel.send({ embeds: [embed] });
   }
 
   private createEmailEmbed(email: EmailData, title?: string): EmbedBuilder {
@@ -85,7 +96,7 @@ export class DiscordService {
         })
         .setTimestamp();
 
-      await channel.send({ embeds: [embed] });
+      await this.sendEmbed(this.channelId, embed);
     } catch (sendError: any) {
       console.error('Failed to send error notification to Discord:', sendError);
     }

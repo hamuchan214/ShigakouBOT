@@ -15,17 +15,18 @@ function getAddressText(
 }
 
 export class EmailForwarder implements BotFeature {
-  public readonly name = 'emailForwarder';
+  public name = 'emailForwarder';
   private imapService: ImapService;
   private discordService: DiscordService;
-  private processedEmails: Set<string> = new Set();
+  private processedEmails = new Set<string>();
 
-  constructor(imapService?: ImapService, discordService?: DiscordService) {
-    this.imapService = imapService || new ImapService();
-    this.discordService = discordService || new DiscordService();
+  constructor(imapService: ImapService, discordService: DiscordService) {
+    this.imapService = imapService;
+    this.discordService = discordService;
   }
 
-  async initialize(): Promise<void> {
+  public async initialize(): Promise<void> {
+    console.log('Initializing EmailForwarder...');
     try {
       await this.discordService.initialize();
 

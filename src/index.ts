@@ -1,18 +1,28 @@
 import dotenv from 'dotenv';
-import { FeatureManager } from './services/featureManager';
+import { DiscordService } from './services/discordService';
+import { ImapService } from './services/imapService';
 import { EmailForwarder } from './services/emailForwarder';
+import { FeatureManager } from './services/featureManager';
+import { OrderNotification } from './services/orderNotification';
 
 dotenv.config();
 
 class GmailDiscordBot {
   private featureManager: FeatureManager;
+  private discordService: DiscordService;
   private checkInterval: NodeJS.Timeout | null = null;
 
   constructor() {
+    this.discordService = new DiscordService();
+    const imapService = new ImapService();
+    
     this.featureManager = new FeatureManager();
     
-    // メール転送機能を追加
-    this.featureManager.addFeature(new EmailForwarder());
+    const emailForwarder = new EmailForwarder(imapService, this.discordService);
+    this.featureManager.addFeature(emailForwarder);
+
+    const orderNotification = new OrderNotification(this.discordService);
+    this.featureManager.addFeature(orderNotification);
   }
 
   async start(): Promise<void> {
