@@ -28,7 +28,7 @@ export class DiscordService {
     });
   }
 
-  async sendEmailNotification(email: EmailData): Promise<void> {
+  async sendEmailNotification(email: EmailData, title?: string): Promise<void> {
     const channel = (await this.client.channels.fetch(
       this.channelId,
     )) as TextChannel;
@@ -36,16 +36,16 @@ export class DiscordService {
       throw new Error(`Channel ${this.channelId} not found`);
     }
 
-    const embed = this.createEmailEmbed(email);
+    const embed = this.createEmailEmbed(email, title);
     await channel.send({ embeds: [embed] });
 
     console.log(`Email notification sent for: ${email.subject}`);
   }
 
-  private createEmailEmbed(email: EmailData): EmbedBuilder {
+  private createEmailEmbed(email: EmailData, title?: string): EmbedBuilder {
     const description = email.body || email.snippet;
     const embed = new EmbedBuilder()
-      .setTitle(`📧 新しいメール: ${email.subject}`)
+      .setTitle(title || `📧 新しいメール: ${email.subject}`)
       .setDescription(description.substring(0, 4096))
       .setColor(0x0099ff)
       .addFields(

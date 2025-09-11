@@ -14,19 +14,6 @@ function getAddressText(
   return address.text;
 }
 
-function mailToEmailData(uid: string, mail: ParsedMail): EmailData {
-  return {
-    id: mail.messageId || new Date().toISOString(),
-    uid: uid,
-    subject: mail.subject || '(No Subject)',
-    from: getAddressText(mail.from),
-    to: getAddressText(mail.to),
-    date: mail.date?.toISOString() || new Date().toISOString(),
-    snippet: (mail.text || '').substring(0, 200),
-    body: mail.text || '',
-  };
-}
-
 export class EmailForwarder implements BotFeature {
   public readonly name = 'emailForwarder';
   private imapService: ImapService;
@@ -43,6 +30,11 @@ export class EmailForwarder implements BotFeature {
       await this.discordService.initialize();
 
       this.imapService.registerMailCallback(this.handleNewEmail.bind(this));
+      this.imapService.registerErrorCallback(
+        (error: Error, context: string) => {
+          this.discordService.sendErrorNotification(error, context);
+        },
+      );
 
       await this.imapService.connect();
       console.log('EmailForwarder initialized and listening for new emails.');
@@ -57,35 +49,60 @@ export class EmailForwarder implements BotFeature {
     }
   }
   
-  private async handleNewEmail(fetchedEmail: FetchedEmail): Promise<void> {
+  private async handleNewEmail(email: FetchedEmail, mailbox: string): Promise<void> {
+    if (this.processedEmails.has(email.uid)) {
+      console.log(`Skipping already processed email with UID: ${email.uid}`);
+      return;
+    }
+
     try {
-      const emailData = mailToEmailData(fetchedEmail.uid, fetchedEmail.mail);
+      const emailData = this.mailToEmailData(email.uid, email.mail);
+      
+      const title = mailbox === 'INBOX' 
+        ? `📧 新しいメール: ${emailData.subject}`
+        : `📨 送信済みメール: ${emailData.subject}`;
 
-          if (this.processedEmails.has(emailData.id)) {
-              console.log(`Skipping already processed email UID ${emailData.uid}`);
-              return;
-          }
+      await this.discordService.sendEmailNotification(emailData, title);
 
-          console.log(`Processing new email UID ${emailData.uid}: ${emailData.subject}`);
-          await this.discordService.sendEmailNotification(emailData);
-
-          this.processedEmails.add(emailData.id);
-          if (this.processedEmails.size > 1000) {
-              const firstKey = this.processedEmails.values().next().value;
-              if (firstKey) {
-                  this.processedEmails.delete(firstKey);
-              }
-          }
+      this.processedEmails.add(email.uid);
+      if (this.processedEmails.size > 1000) {
+        const firstKey = this.processedEmails.values().next().value;
+        if (firstKey) {
+          this.processedEmails.delete(firstKey);
+        }
+      }
     } catch (error: unknown) {
       console.error(
-        `Error handling new email UID ${fetchedEmail.uid}:`,
+        `Error handling new email UID ${email.uid}:`,
         error,
       );
       await this.discordService.sendErrorNotification(
         error as Error,
-        `Email Processing (UID: ${fetchedEmail.uid})`,
+        `Email Processing (UID: ${email.uid})`,
       );
     }
+  }
+
+  private mailToEmailData(uid: string, mail: ParsedMail): EmailData {
+    // Helper function to safely extract address text
+    const getAddressText = (
+      address: AddressObject | AddressObject[] | undefined,
+    ): string => {
+      if (!address) return 'N/A';
+      const addresses = Array.isArray(address) ? address : [address];
+      return addresses.map(a => a.text || 'N/A').join(', ');
+    };
+
+    return {
+      uid: uid,
+      id: mail.messageId || uid,
+      snippet: mail.text?.substring(0, 200) || '',
+      from: getAddressText(mail.from),
+      to: getAddressText(mail.to),
+      subject: mail.subject || '(No Subject)',
+      body: mail.text || '',
+      date: mail.date ? mail.date.toISOString() : new Date().toISOString(),
+    };
   }
 
   // This method will now be a no-op as the class is event-driven.

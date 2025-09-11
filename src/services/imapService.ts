@@ -1,191 +1,79 @@
 import Imap from 'node-imap';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { ParsedMail } from 'mailparser';
+import { InboxMonitor } from './inboxMonitor';
+import { SentMonitor } from './sentMonitor';
+import { FetchedEmail } from './imapConnection';
 
-export interface FetchedEmail {
-  uid: string;
-  mail: ParsedMail;
-}
+export { FetchedEmail };
 
 export class ImapService {
-  private imap!: Imap; // Use definite assignment assertion
-  private onNewMail: ((email: FetchedEmail) => void) | null = null;
-  private onError: ((error: Error) => void) | null = null;
-  private keepAliveInterval: NodeJS.Timeout | null = null;
-  private isReconnecting = false;
-  private manuallyDisconnected = false;
+  private inboxMonitor: InboxMonitor;
+  private sentMonitor: SentMonitor;
+  private onNewMail: ((email: FetchedEmail, mailbox: string) => void) | null = null;
+  private onError: ((error: Error, context: string) => void) | null = null;
 
   constructor() {
-    this.initializeImapConnection();
-  }
-  
-  private initializeImapConnection() {
-    if (this.imap) {
-        this.imap.removeAllListeners();
-    }
-    
-    this.imap = new Imap({
+    const imapConfig: Imap.Config = {
       user: process.env.IMAP_USER || '',
       password: process.env.IMAP_PASSWORD || '',
       host: process.env.IMAP_HOST || '',
       port: parseInt(process.env.IMAP_PORT || '993', 10),
       tls: (process.env.IMAP_TLS || 'true') === 'true',
-      authTimeout: 30000, // 30 seconds
+      authTimeout: 30000,
       tlsOptions: {
         rejectUnauthorized: false,
       },
-      keepalive: { // Built-in keepalive settings
+      keepalive: {
         interval: 10000,
-        idleInterval: 300000, // 5 minutes
+        idleInterval: 300000,
         forceNoop: true,
-      }
-    });
+      },
+    };
 
-    this.imap.on('mail', this.handleNewMail.bind(this));
-    this.imap.on('update', this.handleUpdate.bind(this));
-    this.imap.on('error', this.handleError.bind(this));
-    this.imap.on('end', this.handleEnd.bind(this));
+    this.inboxMonitor = new InboxMonitor(imapConfig);
+    this.sentMonitor = new SentMonitor(imapConfig);
   }
-  public registerErrorCallback(callback: (error: Error) => void) {
-      this.onError = callback;
-  }
-
-  public registerMailCallback(callback: (email: FetchedEmail) => void) {
+  
+  public registerMailCallback(callback: (email: FetchedEmail, mailbox: string) => void) {
     this.onNewMail = callback;
-  }
-
-  private handleNewMail() {
-      console.log('New mail event received. Opening inbox to check.');
-      this.imap.openBox(process.env.IMAP_INBOX || 'INBOX', false, (err, box) => {
-        if (err) {
-            console.error('Error opening inbox for mail event:', err);
-            return;
+    const mailHandler = (mailbox: string) => (email: FetchedEmail) => {
+        if (this.onNewMail) {
+            this.onNewMail(email, mailbox);
         }
-        // Search for the latest unseen email.
-        this.imap.search(['UNSEEN'], (searchErr, uids) => {
-            if (searchErr || uids.length === 0) {
-                if(searchErr) console.error('Search error on new mail:', searchErr);
-                return;
-            }
-            // Fetch the newest email
-            const latestUid = uids[uids.length - 1];
-            this.fetchAndProcess([latestUid]);
-        });
-    });
+    };
+    this.inboxMonitor.registerMailCallback(mailHandler('INBOX'));
+    this.sentMonitor.registerMailCallback(mailHandler('SENT'));
   }
 
-  private handleUpdate(seqno: number, info: any) {
-    console.log(`Mailbox update for seqno ${seqno}:`, info);
+  public registerErrorCallback(callback: (error: Error, context: string) => void) {
+      this.onError = callback;
+      const errorHandler = (context: string) => (error: Error) => {
+          if (this.onError) {
+              this.onError(error, context);
+          }
+      };
+      this.inboxMonitor.registerErrorCallback(errorHandler('Inbox Monitor'));
+      this.sentMonitor.registerErrorCallback(errorHandler('Sent Monitor'));
   }
 
-  private handleError(err: Error) {
-    console.error('IMAP Error:', err);
-    if(this.onError) {
-        this.onError(err);
+  public async connect(): Promise<void> {
+    try {
+      console.log('Connecting to mailboxes...');
+      await Promise.all([
+        this.inboxMonitor.connect(),
+        this.sentMonitor.connect()
+      ]);
+      console.log('All mailboxes connected successfully.');
+    } catch (error) {
+      console.error('Failed to connect one or more mailboxes:', error);
+      // Let individual handlers manage reconnects
+      throw error;
     }
-    this.reconnect();
-  }
-
-  private handleEnd() {
-      console.log('IMAP connection ended.');
-      if (!this.manuallyDisconnected) {
-          this.reconnect();
-      }
-  }
-
-  private reconnect() {
-    if (this.isReconnecting) {
-      return;
-    }
-    this.isReconnecting = true;
-
-    if (this.keepAliveInterval) {
-        clearInterval(this.keepAliveInterval);
-        this.keepAliveInterval = null;
-    }
-
-    console.log('Attempting to reconnect in 15 seconds...');
-    setTimeout(() => {
-        this.initializeImapConnection();
-        this.connect()
-            .then(() => {
-                console.log('IMAP reconnected successfully.');
-                this.isReconnecting = false;
-            })
-            .catch((err) => {
-                console.error('Failed to reconnect:', err);
-                this.isReconnecting = false;
-                // We will try again due to the 'error' or 'end' event firing again
-            });
-    }, 15000);
-  }
-
-  private fetchAndProcess(uids: number[]) {
-      if (uids.length === 0) return;
-
-      const fetch = this.imap.fetch(uids, { bodies: '', struct: true });
-      fetch.on('message', (msg, seqno) => {
-        let uid = '';
-        msg.on('attributes', (attrs) => {
-            uid = String(attrs.uid);
-        });
-        
-        const chunks: Buffer[] = [];
-        msg.on('body', (stream) => {
-            stream.on('data', (chunk) => chunks.push(chunk));
-        });
-
-        msg.once('end', () => {
-            const buffer = Buffer.concat(chunks);
-            simpleParser(buffer, (err, mail) => {
-                if (err) {
-                    console.error(`Error parsing UID ${uid}:`, err);
-                } else {
-                    if (this.onNewMail) {
-                      this.onNewMail({ uid, mail });
-                    }
-                }
-            });
-        });
-    });
-
-    fetch.on('error', (err) => {
-        console.error('Fetch Error:', err);
-    });
-  }
-
-  public connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      this.imap.once('ready', () => {
-        console.log('IMAP connection successful, opening inbox...');
-        this.imap.openBox(process.env.IMAP_INBOX || 'INBOX', false, (err, box) => {
-            if (err) {
-                console.error('Failed to open inbox on connect:', err);
-                return reject(err);
-            }
-            this.manuallyDisconnected = false;
-            console.log('Inbox opened successfully.');
-            resolve();
-        });
-      });
-
-      this.imap.once('error', (err: Error) => {
-        console.error('IMAP connection error:', err);
-        if(this.onError) {
-            this.onError(err);
-        }
-        reject(err);
-      });
-
-      this.imap.connect();
-    });
   }
 
   public disconnect(): void {
-    this.manuallyDisconnected = true;
-    if (this.keepAliveInterval) {
-        clearInterval(this.keepAliveInterval);
-        this.keepAliveInterval = null;
-    }
-    this.imap.end();
+    console.log('Disconnecting from all mailboxes...');
+    this.inboxMonitor.disconnect();
+    this.sentMonitor.disconnect();
   }
 } 
