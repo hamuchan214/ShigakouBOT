@@ -19,6 +19,7 @@ export class ImapConnection {
   private manuallyDisconnected = false;
   private readonly imapConfig: Imap.Config;
   private mailbox: string;
+  private customListeners: Map<string, ((...args: any[]) => void)[]> = new Map();
 
   constructor(config: Imap.Config, mailbox: string) {
     this.imapConfig = config;
@@ -34,6 +35,13 @@ export class ImapConnection {
     this.imap = new Imap(this.imapConfig);
     this.imap.on('error', this.handleError.bind(this));
     this.imap.on('end', this.handleEnd.bind(this));
+
+    // Re-attach custom listeners that were added via .on()
+    for (const [event, listeners] of this.customListeners.entries()) {
+      for (const listener of listeners) {
+        this.imap.on(event, listener);
+      }
+    }
   }
 
   public registerErrorCallback(callback: (error: Error) => void) {
@@ -45,16 +53,23 @@ export class ImapConnection {
   }
 
   public on(event: 'mail' | 'update', listener: (...args: any[]) => void): this {
+    // Store the listener so it can be re-attached on reconnect
+    if (!this.customListeners.has(event)) {
+      this.customListeners.set(event, []);
+    }
+    this.customListeners.get(event)!.push(listener);
+    
+    // Attach to the current imap instance
     this.imap.on(event, listener);
     return this;
   }
 
   private handleError(err: Error) {
     console.error(`[${this.mailbox}] IMAP Error:`, err);
-    if(this.onError) {
-        this.onError(err);
-    }
-    this.reconnect();
+    // if(this.onError) {
+    //     this.onError(err);
+    // }
+    this.reconnect(err);
   }
 
   private handleEnd() {
@@ -64,7 +79,7 @@ export class ImapConnection {
       }
   }
 
-  private reconnect() {
+  private reconnect(initialError?: Error) {
     if (this.isReconnecting) {
       return;
     }
@@ -80,6 +95,11 @@ export class ImapConnection {
             })
             .catch((err) => {
                 console.error(`[${this.mailbox}] Failed to reconnect:`, err);
+                if (this.onError) {
+                    // Notify about the failure to reconnect
+                    const errorToSend = initialError || err;
+                    this.onError(new Error(`Failed to reconnect to ${this.mailbox}. Initial error: ${errorToSend.message}`));
+                }
                 this.isReconnecting = false;
             });
     }, 15000);
