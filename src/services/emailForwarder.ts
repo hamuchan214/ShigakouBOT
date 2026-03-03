@@ -33,7 +33,11 @@ export class EmailForwarder implements BotFeature {
       this.imapService.registerMailCallback(this.handleNewEmail.bind(this));
       this.imapService.registerErrorCallback(
         (error: Error, context: string) => {
-          this.discordService.sendErrorNotification(error, context);
+          // Temporarily disabling IMAP error notifications to reduce noise.
+          // The error will still be logged to the console by the ImapConnection class.
+          console.error(`IMAP Error forwarded from ImapService: ${context}`, error);
+          // Original line:
+          // this.discordService.sendErrorNotification(error, context);
         },
       );
 

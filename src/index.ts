@@ -4,6 +4,7 @@ import { ImapService } from './services/imapService';
 import { EmailForwarder } from './services/emailForwarder';
 import { FeatureManager } from './services/featureManager';
 import { OrderNotification } from './services/orderNotification';
+import { ProgressReminder } from './services/progressReminder';
 
 dotenv.config();
 
@@ -23,6 +24,9 @@ class GmailDiscordBot {
 
     const orderNotification = new OrderNotification(this.discordService);
     this.featureManager.addFeature(orderNotification);
+
+    const progressReminder = new ProgressReminder(this.discordService);
+    this.featureManager.addFeature(progressReminder);
   }
 
   async start(): Promise<void> {
