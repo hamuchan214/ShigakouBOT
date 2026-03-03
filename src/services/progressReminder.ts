@@ -53,7 +53,7 @@ export class ProgressReminder implements BotFeature {
 
     // 毎日 JST 19:20 に実行（テスト用）
     this.cronJob = schedule(
-      '20 19 * * *',
+      '0 21 * * *',
       () => this.sendReminder(),
       { timezone: 'Asia/Tokyo' },
     );
