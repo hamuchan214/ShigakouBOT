@@ -34,7 +34,7 @@ export class ProgressReminder implements BotFeature {
     try {
       await this.discordService.sendMessage(
         channelId,
-        '@everyone 毎日JSTのPM9時に進捗報告してください！',
+        '@everyone PM9時です！進捗報告してください！ないならないって書けばOK',
       );
       console.log('[ProgressReminder] Progress report reminder sent.');
     } catch (error) {
