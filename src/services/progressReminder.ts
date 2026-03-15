@@ -68,7 +68,7 @@ export class ProgressReminder implements BotFeature {
 
     const remainText = parts.length > 0 ? parts.join('') : '1分未満';
 
-    return `@everyone 学ロボ二次ビデオ審査の提出締切まで残り ${remainText} です。`;
+    return `学ロボ二次ビデオ審査の提出締切まで残り ${remainText} です。`;
   }
 
   private async sendReminder(): Promise<void> {
