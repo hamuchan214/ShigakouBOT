@@ -22,6 +22,55 @@ export class ProgressReminder implements BotFeature {
     );
   }
 
+  private getTargetDate(): Date | null {
+    const raw = process.env.GAKUROBO_DATE;
+    if (!raw) {
+      console.warn(
+        '[ProgressReminder] GAKUROBO_DATE is not set. Countdown message will use a placeholder.',
+      );
+      return null;
+    }
+
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) {
+      console.warn(
+        `[ProgressReminder] GAKUROBO_DATE is invalid (${raw}). Expected ISO like 2026-11-01T09:00:00+09:00`,
+      );
+      return null;
+    }
+    return d;
+  }
+
+  private buildCountdownMessage(): string | null {
+    const target = this.getTargetDate();
+    const now = new Date();
+
+    if (!target) {
+      return '@学ロボ二次ビデオ審査提出までのカウントダウン設定(GAKUROBO_DATE)がされていません。環境変数を確認してください。';
+    }
+
+    const diffMs = target.getTime() - now.getTime();
+
+    if (diffMs <= 0) {
+      // 二次ビデオ審査の締切を過ぎたら何も投稿しない
+      return null;
+    }
+
+    const totalMinutes = Math.floor(diffMs / (1000 * 60));
+    const days = Math.floor(totalMinutes / (60 * 24));
+    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+    const minutes = totalMinutes % 60;
+
+    const parts: string[] = [];
+    if (days > 0) parts.push(`${days}日`);
+    if (hours > 0) parts.push(`${hours}時間`);
+    if (minutes > 0) parts.push(`${minutes}分`);
+
+    const remainText = parts.length > 0 ? parts.join('') : '1分未満';
+
+    return `@everyone 学ロボ二次ビデオ審査の提出締切まで残り ${remainText} です。`;
+  }
+
   private async sendReminder(): Promise<void> {
     const channelId = this.getChannelId();
     if (!channelId) {
@@ -31,11 +80,14 @@ export class ProgressReminder implements BotFeature {
       return;
     }
 
+    const message = this.buildCountdownMessage();
+    if (!message) {
+      console.log('[ProgressReminder] Countdown is over. No message sent.');
+      return;
+    }
+
     try {
-      await this.discordService.sendMessage(
-        channelId,
-        '@everyone PM9時です！進捗報告してください！ないならないって書けばOK',
-      );
+      await this.discordService.sendMessage(channelId, message);
       console.log('[ProgressReminder] Progress report reminder sent.');
     } catch (error) {
       console.error('[ProgressReminder] Failed to send reminder:', error);
@@ -51,14 +103,17 @@ export class ProgressReminder implements BotFeature {
       return;
     }
 
-    // 毎日 JST 19:20 に実行（テスト用）
+    // 12時間ごとに実行（JST, 0時・12時）
     this.cronJob = schedule(
-      '0 21 * * *',
+      '0 */12 * * *',
       () => this.sendReminder(),
       { timezone: 'Asia/Tokyo' },
     );
 
-    console.log('[ProgressReminder] Scheduled: daily at 9:00 PM JST');
+    console.log('[ProgressReminder] Scheduled: every 12 hours (JST, 0:00 & 12:00)');
+
+    // 起動時に一度だけ現在の残り時間を投稿
+    await this.sendReminder();
   }
 
   public async execute(): Promise<void> {
