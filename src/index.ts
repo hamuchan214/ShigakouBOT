@@ -5,6 +5,7 @@ import { EmailForwarder } from './services/emailForwarder';
 import { FeatureManager } from './services/featureManager';
 import { OrderNotification } from './services/orderNotification';
 import { ProgressReminder } from './services/progressReminder';
+import { MemberProgressManager } from './services/memberProgressManager';
 
 dotenv.config();
 
@@ -27,6 +28,11 @@ class GmailDiscordBot {
 
     const progressReminder = new ProgressReminder(this.discordService);
     this.featureManager.addFeature(progressReminder);
+
+    // MemberProgressManager のコンストラクタ内でスラッシュコマンドを登録する
+    // (discordService.initialize() より前に呼ぶ必要があるためコンストラクタで実施)
+    const memberProgressManager = new MemberProgressManager(this.discordService);
+    this.featureManager.addFeature(memberProgressManager);
   }
 
   async start(): Promise<void> {

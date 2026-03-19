@@ -52,8 +52,7 @@ export class ProgressReminder implements BotFeature {
     const diffMs = target.getTime() - now.getTime();
 
     if (diffMs <= 0) {
-      // 二次ビデオ審査の締切を過ぎたら何も投稿しない
-      return null;
+      return '学ロボ二次ビデオ審査の提出締切を過ぎました。';
     }
 
     const totalMinutes = Math.floor(diffMs / (1000 * 60));

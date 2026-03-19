@@ -1,11 +1,16 @@
-import { Client, GatewayIntentBits, TextChannel, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, TextChannel, EmbedBuilder, Interaction } from 'discord.js';
 import { REST, Routes } from 'discord.js';
-import { SlashCommandBuilder } from '@discordjs/builders';
+import { SlashCommandBuilder, ContextMenuCommandBuilder } from '@discordjs/builders';
 import { EmailData } from '../types';
 
 export class DiscordService {
   private client: Client;
   private channelId: string;
+  private externalCommandDefinitions: ReturnType<SlashCommandBuilder['toJSON']>[] = [];
+  private externalInteractionHandlers: Array<{
+    name: string;
+    handler: (interaction: Interaction) => Promise<void>;
+  }> = [];
 
   constructor() {
     this.client = new Client({
@@ -14,11 +19,19 @@ export class DiscordService {
     this.channelId = process.env.DISCORD_CHANNEL_ID || '';
   }
 
+  addExternalCommand(
+    command: SlashCommandBuilder | ContextMenuCommandBuilder,
+    handler: (interaction: Interaction) => Promise<void>,
+  ): void {
+    this.externalCommandDefinitions.push(command.toJSON() as ReturnType<SlashCommandBuilder['toJSON']>);
+    this.externalInteractionHandlers.push({ name: command.name, handler });
+  }
+
   private setupSlashCommands(): void {
     this.client.on('interactionCreate', async (interaction) => {
-      if (!interaction.isChatInputCommand()) return;
+      if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
 
-      if (interaction.commandName === 'testmention') {
+      if (interaction.isChatInputCommand() && interaction.commandName === 'testmention') {
         try {
           const channelId = interaction.channelId;
           if (channelId) {
@@ -30,6 +43,24 @@ export class DiscordService {
         } catch (error) {
           console.error('[testmention] Error:', error);
           await interaction.reply({ content: 'メンションの送信に失敗しました。', ephemeral: true }).catch(() => {});
+        }
+        return;
+      }
+
+      const external = this.externalInteractionHandlers.find(
+        (h) => h.name === interaction.commandName,
+      );
+      if (external) {
+        try {
+          await external.handler(interaction);
+        } catch (error) {
+          console.error(`[${interaction.commandName}] Error:`, error);
+          const reply = { content: 'コマンドの実行に失敗しました。', ephemeral: true };
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(reply).catch(() => {});
+          } else {
+            await interaction.reply(reply).catch(() => {});
+          }
         }
       }
     });
@@ -45,6 +76,7 @@ export class DiscordService {
         .setName('testmention')
         .setDescription('メンション（@everyone）のテストを送信します')
         .toJSON(),
+      ...this.externalCommandDefinitions,
     ];
 
     const rest = new REST({ version: '10' }).setToken(token);
