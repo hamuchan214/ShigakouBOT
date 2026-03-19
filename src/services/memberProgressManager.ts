@@ -1,6 +1,6 @@
 import { schedule, ScheduledTask } from 'node-cron';
-import { Interaction, MessageContextMenuCommandInteraction, ApplicationCommandType } from 'discord.js';
-import { ContextMenuCommandBuilder } from '@discordjs/builders';
+import { Interaction, MessageContextMenuCommandInteraction, ChatInputCommandInteraction, ApplicationCommandType } from 'discord.js';
+import { ContextMenuCommandBuilder, SlashCommandBuilder } from '@discordjs/builders';
 import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs';
 import path from 'path';
@@ -48,6 +48,12 @@ export class MemberProgressManager implements BotFeature {
       .setType(ApplicationCommandType.Message);
 
     discordService.addExternalCommand(command, this.handleContextMenu.bind(this));
+
+    // /check スラッシュコマンドを登録
+    const checkCommand = new SlashCommandBuilder()
+      .setName('check')
+      .setDescription('今日のタスク一覧を確認します');
+    discordService.addExternalCommand(checkCommand, this.handleCheckCommand.bind(this));
   }
 
   private loadData(): ProgressData {
@@ -105,6 +111,41 @@ ${rawText}`,
     return parsed.tasks ?? [];
   }
 
+  private async mergeTasksWithAI(existingTasks: Task[], newTasks: Task[]): Promise<Task[]> {
+    const response = await this.anthropic.messages.create({
+      model: 'claude-opus-4-6',
+      max_tokens: 1024,
+      messages: [
+        {
+          role: 'user',
+          content: `既存のタスクリストに新しいタスクをマージしてください。
+
+マージルール:
+- 日付が重複または近接していて内容が似ているタスクは新しい方で上書き
+- 日付が全く異なる場合は追記
+- 既存タスクの中で新タスクによって明らかに不要になったものは削除
+- 重複するタスクはまとめる
+
+以下のJSON形式のみで返答してください（説明文・コードブロック不要）:
+{"tasks":[{"startDate":"YYYY-MM-DD","endDate":"YYYY-MM-DD or null","description":"タスクの説明"}]}
+
+既存タスク:
+${JSON.stringify(existingTasks, null, 2)}
+
+新しいタスク:
+${JSON.stringify(newTasks, null, 2)}`,
+        },
+      ],
+    });
+
+    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AIのマージ結果からJSONを抽出できませんでした');
+
+    const parsed = JSON.parse(jsonMatch[0]) as { tasks: Task[] };
+    return parsed.tasks ?? [];
+  }
+
   private async handleContextMenu(interaction: Interaction): Promise<void> {
     if (!interaction.isMessageContextMenuCommand()) return;
 
@@ -122,9 +163,9 @@ ${rawText}`,
       return;
     }
 
-    const tasks = await this.parseTasksWithAI(rawText);
+    const newTasks = await this.parseTasksWithAI(rawText);
 
-    if (tasks.length === 0) {
+    if (newTasks.length === 0) {
       await ctx.editReply(
         '⚠️ タスクを検出できませんでした。日付付きのタスクが含まれているメッセージを選んでください。',
       );
@@ -132,6 +173,11 @@ ${rawText}`,
     }
 
     const data = this.loadData();
+    const existingTasks = data.members[targetUser.id]?.tasks ?? [];
+    const tasks = existingTasks.length > 0
+      ? await this.mergeTasksWithAI(existingTasks, newTasks)
+      : newTasks;
+
     data.members[targetUser.id] = {
       displayName,
       tasks,
@@ -153,6 +199,31 @@ ${rawText}`,
     console.log(
       `[MemberProgressManager] Registered ${tasks.length} tasks for ${displayName}`,
     );
+  }
+
+  private async handleCheckCommand(interaction: Interaction): Promise<void> {
+    if (!interaction.isChatInputCommand()) return;
+    const ctx = interaction as ChatInputCommandInteraction;
+
+    const membersWithTasks = this.getTodaysTasks();
+    if (membersWithTasks.length === 0) {
+      await ctx.reply({ content: '今日のタスクは登録されていません。', ephemeral: true });
+      return;
+    }
+
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+
+    let message = `📋 **今日のタスク確認 (${dateStr})**\n\n`;
+    for (const member of membersWithTasks) {
+      message += `**${member.displayName}**\n`;
+      for (const task of member.tasks) {
+        message += `　・${task.description}\n`;
+      }
+      message += '\n';
+    }
+
+    await ctx.reply({ content: message, ephemeral: true });
   }
 
   private getTodaysTasks(): { displayName: string; tasks: Task[] }[] {

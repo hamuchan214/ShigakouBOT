@@ -1,0 +1,25 @@
+{
+  "members": {
+    "485619731651493912": {
+      "displayName": "hamuchanmk.3",
+      "tasks": [
+        {
+          "startDate": "2026-03-19",
+          "endDate": "2026-03-19",
+          "description": "部品製作"
+        },
+        {
+          "startDate": "2026-03-20",
+          "endDate": "2026-03-20",
+          "description": "暫定のタイヤの完成"
+        },
+        {
+          "startDate": "2026-03-21",
+          "endDate": null,
+          "description": "R1の新しい部品の製作"
+        }
+      ],
+      "updatedAt": "2026-03-19T05:43:36.095Z"
+    }
+  }
+}
