@@ -6,6 +6,7 @@ import { FeatureManager } from './services/featureManager';
 import { OrderNotification } from './services/orderNotification';
 import { ProgressReminder } from './services/progressReminder';
 import { MemberProgressManager } from './services/memberProgressManager';
+import { SpacerGenerator } from './services/spacerGenerator';
 
 dotenv.config();
 
@@ -33,6 +34,9 @@ class GmailDiscordBot {
     // (discordService.initialize() より前に呼ぶ必要があるためコンストラクタで実施)
     const memberProgressManager = new MemberProgressManager(this.discordService);
     this.featureManager.addFeature(memberProgressManager);
+
+    const spacerGenerator = new SpacerGenerator(this.discordService);
+    this.featureManager.addFeature(spacerGenerator);
   }
 
   async start(): Promise<void> {
