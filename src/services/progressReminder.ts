@@ -46,28 +46,18 @@ export class ProgressReminder implements BotFeature {
     const now = new Date();
 
     if (!target) {
-      return '@学ロボ二次ビデオ審査提出までのカウントダウン設定(GAKUROBO_DATE)がされていません。環境変数を確認してください。';
+      return '学生ロボコン本番日の設定(GAKUROBO_DATE)がされていません。環境変数を確認してください。';
     }
 
     const diffMs = target.getTime() - now.getTime();
 
     if (diffMs <= 0) {
-      return '学ロボ二次ビデオ審査の提出締切を過ぎました。';
+      return null;
     }
 
-    const totalMinutes = Math.floor(diffMs / (1000 * 60));
-    const days = Math.floor(totalMinutes / (60 * 24));
-    const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
-    const minutes = totalMinutes % 60;
+    const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-    const parts: string[] = [];
-    if (days > 0) parts.push(`${days}日`);
-    if (hours > 0) parts.push(`${hours}時間`);
-    if (minutes > 0) parts.push(`${minutes}分`);
-
-    const remainText = parts.length > 0 ? parts.join('') : '1分未満';
-
-    return `学ロボ二次ビデオ審査の提出締切まで残り ${remainText} です。`;
+    return `学生ロボコンまであと${days}日です。`;
   }
 
   private async sendReminder(): Promise<void> {

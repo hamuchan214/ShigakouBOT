@@ -7,6 +7,7 @@ import { OrderNotification } from './services/orderNotification';
 import { ProgressReminder } from './services/progressReminder';
 import { MemberProgressManager } from './services/memberProgressManager';
 import { SpacerGenerator } from './services/spacerGenerator';
+import { EarthquakeNotification } from './services/earthquakeNotification';
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ class GmailDiscordBot {
 
     const spacerGenerator = new SpacerGenerator(this.discordService);
     this.featureManager.addFeature(spacerGenerator);
+
+    const earthquakeNotification = new EarthquakeNotification(this.discordService);
+    this.featureManager.addFeature(earthquakeNotification);
   }
 
   async start(): Promise<void> {
